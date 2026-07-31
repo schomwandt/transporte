@@ -24,6 +24,45 @@ Si un `route_id_raw` no resuelve, la fila se inserta igual (con `route_id`
 NULL) para no perder datos, y queda para agregar al crosswalk manualmente
 con `db_agregar_crosswalk()`.
 
+## API en tiempo real
+
+Confirmado y funcionando (`vehiclePositionsSimple`, JSON, no requiere `json=true`):
+```
+https://apitransporte.buenosaires.gob.ar/colectivos/vehiclePositionsSimple?client_id=TU_ID&client_secret=TU_SECRET
+```
+
+**Vinculación de líneas — hallazgo real**: el `route_id` que devuelve este feed
+es un ID interno de la API, no el `route_id` del GTFS estático. El campo
+confiable para vincular es `route_short_name` (ej `"57J"`), que sí coincide
+con `routes.txt`. `fn_resolver_route_id()` prioriza: crosswalk manual →
+`route_short_name` → `trip_id` (este último rara vez sirve: el `tip_id` del
+feed no tiene formato GTFS estándar).
+
+Completar en `.env`:
+```
+API_TRANSPORTE_CLIENT_ID=...
+API_TRANSPORTE_CLIENT_SECRET=...
+```
+
+Correr una carga puntual:
+```bash
+Rscript R/etl/etl_gtfs_rt_poller.R
+```
+
+### Actualización periódica (Windows Task Scheduler)
+
+1. Programador de tareas → Crear tarea básica.
+2. Desencadenador: "Repetir tarea cada" 1 minuto (o el intervalo que definas),
+   indefinidamente.
+3. Acción: iniciar programa
+   - Programa: `Rscript.exe` (ruta típica: `C:\Program Files\R\R-4.x.x\bin\Rscript.exe`)
+   - Argumentos: `R/etl/etl_gtfs_rt_poller.R`
+   - Iniciar en: `D:\OneDrive\DOCENCIA_UBA\PROBABILIDAD-ESTADISTICA_2026\transporte`
+
+No dejar el poller corriendo en loop infinito dentro de una sesión de R — cada
+corrida del script se conecta, inserta y cierra la conexión; Task Scheduler
+se encarga de la repetición.
+
 ## Setup
 
 ```bash

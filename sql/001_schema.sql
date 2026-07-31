@@ -63,25 +63,27 @@ CREATE INDEX IF NOT EXISTS idx_stops_geom ON gtfs_static.stops USING GIST(geom);
 -- Esta tabla queda lista para recibir el feed apenas se reanude el servicio.
 
 CREATE TABLE IF NOT EXISTS gtfs_rt.vehicle_positions (
-  id              BIGSERIAL PRIMARY KEY,
-  vehicle_id      TEXT,
-  trip_id         TEXT,             -- viene del feed RT, puede no matchear directo con trips.trip_id
-  route_id_raw    TEXT,             -- route_id tal cual lo entrega el feed RT (puede diferir del estático)
-  route_id        TEXT,             -- resuelto vía fn_resolver_route_id() antes de insertar
-  lat             DOUBLE PRECISION,
-  lon             DOUBLE PRECISION,
-  geom            GEOMETRY(Point, 4326),
-  bearing         DOUBLE PRECISION,
-  speed           DOUBLE PRECISION,
-  timestamp_feed  TIMESTAMP,
-  ingested_at     TIMESTAMP DEFAULT NOW()
+  id                  BIGSERIAL PRIMARY KEY,
+  vehicle_id          TEXT,
+  trip_id_raw         TEXT,             -- "tip_id" del feed, no matchea trips.trip_id directo
+  route_id_raw        TEXT,             -- route_id interno del feed RT (NO es gtfs_static.route_id)
+  route_short_name_raw TEXT,            -- ej "57J" — fuente más confiable para vincular
+  agency_id_raw       INTEGER,
+  route_id            TEXT,             -- resuelto vía fn_resolver_route_id() antes de insertar
+  lat                 DOUBLE PRECISION,
+  lon                 DOUBLE PRECISION,
+  geom                GEOMETRY(Point, 4326),
+  direction           SMALLINT,         -- 0/1, no es bearing en grados
+  speed               DOUBLE PRECISION,
+  timestamp_feed      TIMESTAMP,
+  ingested_at         TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_vp_geom ON gtfs_rt.vehicle_positions USING GIST(geom);
 CREATE INDEX IF NOT EXISTS idx_vp_route_id ON gtfs_rt.vehicle_positions(route_id);
 CREATE INDEX IF NOT EXISTS idx_vp_ingested_at ON gtfs_rt.vehicle_positions(ingested_at);
 
--- Tabla de crosswalk manual para casos donde route_id_raw no resuelve por trip_id
--- ni por route_short_name (mismatches conocidos entre estático y RT)
+-- Tabla de crosswalk manual — override explícito cuando route_short_name
+-- no alcanza (ambigüedad entre agencias, línea renombrada, etc.)
 CREATE TABLE IF NOT EXISTS app_config.route_id_crosswalk (
   route_id_raw TEXT PRIMARY KEY,   -- valor tal cual llega del feed RT
   route_id     TEXT NOT NULL REFERENCES gtfs_static.routes(route_id),

@@ -35,7 +35,7 @@ qry_get_posiciones_actuales <- function(pool, route_ids = NULL) {
     con <- poolCheckout(pool)
     on.exit(poolReturn(con))
 
-    query  <- "SELECT vehicle_id, route_id, lat, lon, bearing, speed, timestamp_feed
+    query  <- "SELECT vehicle_id, route_id, lat, lon, speed, timestamp_feed
                FROM   gtfs_rt.vw_ultimas_posiciones"
     params <- list()
 
