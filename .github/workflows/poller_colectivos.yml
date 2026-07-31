@@ -25,6 +25,7 @@ jobs:
             any::httr
             any::jsonlite
             any::dplyr
+            any::dotenv
       - name: Correr poller
         env:
           DB_HOST: ${{ secrets.DB_HOST }}
