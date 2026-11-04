@@ -1,8 +1,8 @@
 -- Resuelve route_id real (gtfs_static.routes) a partir de lo que entrega el feed RT.
 -- Orden: 1) crosswalk manual (override explícito) 2) route_short_name (más confiable:
 -- el route_id_raw del feed es un ID interno propio de la API, no el GTFS estático)
--- 3) trip_id como último recurso (el "tip_id" del feed no tiene formato GTFS estándar,
--- rara vez matchea trips.trip_id — se deja solo por si algún feed sí lo respeta).
+-- p_trip_id_raw se mantiene en la firma por compatibilidad, pero ya no se usa:
+-- el "tip_id" del feed no tiene formato GTFS estándar y no matcheaba trips.trip_id.
 CREATE OR REPLACE FUNCTION app_config.fn_resolver_route_id(
   p_route_short_name TEXT,
   p_route_id_raw      TEXT,
@@ -35,13 +35,6 @@ BEGIN
     IF v_route_id IS NOT NULL THEN
       RETURN v_route_id;
     END IF;
-  END IF;
-
-  -- 3) último intento vía trip_id, si el feed alguna vez lo manda en formato GTFS válido
-  IF p_trip_id_raw IS NOT NULL THEN
-    SELECT route_id INTO v_route_id
-    FROM gtfs_static.trips
-    WHERE trip_id = p_trip_id_raw;
   END IF;
 
   RETURN v_route_id;  -- NULL si no resolvió nada: revisar/agregar al crosswalk
@@ -101,32 +94,6 @@ EXCEPTION
 END;
 $$;
 
--- Reconstruye gtfs_static.shape_lines (LineString) a partir de los puntos de shapes.txt
--- Correr después de cada carga de GTFS estático.
-CREATE OR REPLACE FUNCTION gtfs_static.fn_build_shape_lines()
-RETURNS INTEGER
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_count INTEGER;
-BEGIN
-  TRUNCATE gtfs_static.shape_lines;
-
-  INSERT INTO gtfs_static.shape_lines (shape_id, geom)
-  SELECT shape_id,
-         ST_MakeLine(geom ORDER BY shape_pt_sequence)
-  FROM   gtfs_static.shapes
-  GROUP BY shape_id;
-
-  GET DIAGNOSTICS v_count = ROW_COUNT;
-  RETURN v_count;
-EXCEPTION
-  WHEN OTHERS THEN
-    RAISE WARNING 'fn_build_shape_lines error: %', SQLERRM;
-    RETURN -1;
-END;
-$$;
-
 -- Vista: recorrido completo de cada línea con su nombre visible
 CREATE OR REPLACE VIEW gtfs_static.vw_lineas_recorrido AS
 SELECT DISTINCT ON (r.route_id)
@@ -136,8 +103,8 @@ SELECT DISTINCT ON (r.route_id)
   r.agency_id,
   sl.geom
 FROM gtfs_static.routes r
-JOIN gtfs_static.trips t  ON t.route_id = r.route_id
-JOIN gtfs_static.shape_lines sl ON sl.shape_id = t.shape_id
+JOIN gtfs_static.route_shapes rs ON rs.route_id = r.route_id
+JOIN gtfs_static.shape_lines sl  ON sl.shape_id = rs.shape_id
 WHERE r.activo = TRUE;
 
 -- Vista: últimas posiciones conocidas por vehículo (para el mapa en vivo)
