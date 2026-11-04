@@ -41,14 +41,14 @@ routes <- leer_gtfs("routes.txt") %>%
 dbWriteTable(con, DBI::Id(schema = "gtfs_static", table = "routes"),
              routes, append = TRUE, row.names = FALSE)
 
-# --- trips ---
-trips <- leer_gtfs("trips.txt") %>%
-  transmute(trip_id, route_id, service_id, trip_headsign,
-            direction_id = as.integer(direction_id), shape_id)
-dbWriteTable(con, DBI::Id(schema = "gtfs_static", table = "trips"),
-             trips, append = TRUE, row.names = FALSE)
+# --- route_shapes (solo la relación ruta -> shape; trips completo no se guarda) ---
+route_shapes <- leer_gtfs("trips.txt") %>%
+  filter(!is.na(shape_id)) %>%
+  distinct(route_id, direction_id = as.integer(direction_id), shape_id)
+dbWriteTable(con, DBI::Id(schema = "gtfs_static", table = "route_shapes"),
+             route_shapes, append = TRUE, row.names = FALSE)
 
-# --- shapes (puntos → se cargan vía COPY con geom generada en SQL) ---
+# --- shapes: los puntos van a una tabla temporal y se guardan solo como LineString ---
 shapes <- leer_gtfs("shapes.txt")
 dbExecute(con, "CREATE TEMP TABLE _shapes_raw (
   shape_id TEXT, shape_pt_lat DOUBLE PRECISION,
@@ -56,11 +56,15 @@ dbExecute(con, "CREATE TEMP TABLE _shapes_raw (
 dbWriteTable(con, "_shapes_raw", shapes %>%
   select(shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence),
   append = TRUE, row.names = FALSE)
-dbExecute(con, "
-  INSERT INTO gtfs_static.shapes (shape_id, shape_pt_sequence, geom)
-  SELECT shape_id, shape_pt_sequence,
-         ST_SetSRID(ST_Point(shape_pt_lon, shape_pt_lat), 4326)
-  FROM _shapes_raw")
+dbExecute(con, "TRUNCATE gtfs_static.shape_lines")
+n <- dbExecute(con, "
+  INSERT INTO gtfs_static.shape_lines (shape_id, geom)
+  SELECT shape_id,
+         ST_MakeLine(ST_SetSRID(ST_Point(shape_pt_lon, shape_pt_lat), 4326)
+                     ORDER BY shape_pt_sequence)
+  FROM _shapes_raw
+  GROUP BY shape_id")
+message(sprintf("shape_lines cargadas: %s", n))
 
 # --- stops ---
 stops <- leer_gtfs("stops.txt")
@@ -73,10 +77,6 @@ dbExecute(con, "
   SELECT stop_id, stop_name, ST_SetSRID(ST_Point(stop_lon, stop_lat), 4326)
   FROM _stops_raw
   ON CONFLICT (stop_id) DO NOTHING")
-
-# --- reconstruir líneas geográficas a partir de los puntos cargados ---
-n <- dbGetQuery(con, "SELECT gtfs_static.fn_build_shape_lines() AS n")$n
-message(sprintf("shape_lines reconstruidas: %s", n))
 
 unlink(tmp_dir, recursive = TRUE)
 message("Carga GTFS estático completa.")

@@ -16,9 +16,12 @@ para cuando se reanude el feed en tiempo real.
 
 `fn_resolver_route_id()` en `sql/002_funciones.sql` resuelve el `route_id`
 de una posición RT en este orden:
-1. `trip_id` → `gtfs_static.trips.route_id` (la vía más confiable)
-2. `app_config.route_id_crosswalk` (mapeos manuales para mismatches conocidos)
-3. match directo por `route_id` o `route_short_name`
+1. `app_config.route_id_crosswalk` (mapeos manuales para mismatches conocidos)
+2. match directo por `route_short_name`
+
+El `tip_id` del feed RT no tiene formato GTFS estándar, por lo que ya no se
+usa `trip_id` para resolver ni se guarda la tabla `trips` completa: solo
+`gtfs_static.route_shapes` (ruta → recorrido) y `gtfs_static.shape_lines`.
 
 Si un `route_id_raw` no resuelve, la fila se inserta igual (con `route_id`
 NULL) para no perder datos, y queda para agregar al crosswalk manualmente

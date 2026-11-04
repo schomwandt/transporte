@@ -59,11 +59,11 @@ insertar_posiciones <- function(df) {
   dbWriteTable(con, "_vp_raw", raw, temporary = TRUE, row.names = FALSE)
 
   # Resolución vectorizada, mismo orden de prioridad que fn_resolver_route_id:
-  # crosswalk manual -> route_short_name -> trip_id
+  # crosswalk manual -> route_short_name -> número base de línea
   res <- dbGetQuery(con, "
     WITH resueltas AS (
       SELECT v.*,
-        COALESCE(cw.route_id, r_short.route_id, r_base.route_id, r_trip.route_id,
+        COALESCE(cw.route_id, r_short.route_id, r_base.route_id,
                  'RT-' || v.route_short_name_raw) AS route_id
       FROM _vp_raw v
       LEFT JOIN app_config.route_id_crosswalk cw ON cw.route_id_raw = v.route_id_raw
@@ -71,8 +71,6 @@ insertar_posiciones <- function(df) {
       LEFT JOIN gtfs_static.routes r_base
         ON r_short.route_id IS NULL
        AND r_base.route_short_name = regexp_replace(v.route_short_name_raw, '^([0-9]+).*', '\\1')
-      LEFT JOIN gtfs_static.trips t ON t.trip_id = v.trip_id_raw
-      LEFT JOIN gtfs_static.routes r_trip ON r_trip.route_id = t.route_id
       WHERE v.lat BETWEEN -90 AND 90 AND v.lon BETWEEN -180 AND 180
     ),
     ins AS (

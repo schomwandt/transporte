@@ -26,25 +26,18 @@ CREATE TABLE IF NOT EXISTS gtfs_static.routes (
 );
 CREATE INDEX IF NOT EXISTS idx_routes_short_name ON gtfs_static.routes(route_short_name);
 
-CREATE TABLE IF NOT EXISTS gtfs_static.trips (
-  trip_id       TEXT PRIMARY KEY,
-  route_id      TEXT NOT NULL REFERENCES gtfs_static.routes(route_id),
-  service_id    TEXT,
-  trip_headsign TEXT,
-  direction_id  SMALLINT,
-  shape_id      TEXT
+-- Relación ruta -> sentido -> recorrido, derivada de trips.txt.
+-- Reemplaza a la tabla trips completa (cientos de miles de filas) porque la app
+-- solo necesita saber qué shape corresponde a cada ruta.
+CREATE TABLE IF NOT EXISTS gtfs_static.route_shapes (
+  route_id     TEXT NOT NULL REFERENCES gtfs_static.routes(route_id),
+  direction_id SMALLINT,
+  shape_id     TEXT NOT NULL,
+  PRIMARY KEY (route_id, shape_id)
 );
-CREATE INDEX IF NOT EXISTS idx_trips_route_id ON gtfs_static.trips(route_id);
 
-CREATE TABLE IF NOT EXISTS gtfs_static.shapes (
-  shape_id            TEXT NOT NULL,
-  shape_pt_sequence   INTEGER NOT NULL,
-  geom                GEOMETRY(Point, 4326) NOT NULL,
-  PRIMARY KEY (shape_id, shape_pt_sequence)
-);
-CREATE INDEX IF NOT EXISTS idx_shapes_geom ON gtfs_static.shapes USING GIST(geom);
-
--- Recorrido de cada línea como LineString, derivado de shapes (ver 002_funciones.sql)
+-- Recorrido de cada línea como LineString, armado en la carga desde shapes.txt
+-- (los puntos no se guardan; ver R/etl/etl_gtfs_estatico.R)
 CREATE TABLE IF NOT EXISTS gtfs_static.shape_lines (
   shape_id TEXT PRIMARY KEY,
   geom     GEOMETRY(LineString, 4326) NOT NULL
